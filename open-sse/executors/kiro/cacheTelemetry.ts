@@ -15,7 +15,7 @@ export type KiroCacheObservation = {
   cacheWriteKeys: string[];
 };
 
-const MAX_OBSERVED_FRAMES = 200;
+const MAX_OBSERVED_FRAMES = 1000;
 
 const CACHE_READ_KEYS = [
   "cacheReadInputTokens",
