@@ -194,10 +194,33 @@ export function convertKiroToOpenAI(chunk, state) {
   if (eventType === "usageEvent" || data.usageEvent) {
     const usage = data.usageEvent || data;
     if (usage && typeof usage === "object") {
+      const prior = state.usage && typeof state.usage === "object" ? state.usage : {};
       state.usage = {
-        prompt_tokens: usage.inputTokens || 0,
-        completion_tokens: usage.outputTokens || 0,
-        total_tokens: (usage.inputTokens || 0) + (usage.outputTokens || 0),
+        ...prior,
+        prompt_tokens: usage.inputTokens ?? usage.prompt_tokens ?? prior.prompt_tokens ?? 0,
+        completion_tokens:
+          usage.outputTokens ?? usage.completion_tokens ?? prior.completion_tokens ?? 0,
+        total_tokens:
+          (usage.inputTokens ?? usage.prompt_tokens ?? prior.prompt_tokens ?? 0) +
+          (usage.outputTokens ?? usage.completion_tokens ?? prior.completion_tokens ?? 0),
+        ...(typeof usage.cacheReadInputTokens === "number" && {
+          cache_read_input_tokens: usage.cacheReadInputTokens,
+        }),
+        ...(typeof usage.cacheWriteInputTokens === "number" && {
+          cache_creation_input_tokens: usage.cacheWriteInputTokens,
+        }),
+        ...(typeof usage.cache_read_input_tokens === "number" && {
+          cache_read_input_tokens: usage.cache_read_input_tokens,
+        }),
+        ...(typeof usage.cache_creation_input_tokens === "number" && {
+          cache_creation_input_tokens: usage.cache_creation_input_tokens,
+        }),
+        ...(typeof usage.provider_credits === "number" && {
+          provider_credits: usage.provider_credits,
+        }),
+        ...(typeof usage.cost_in_usd_ticks === "number" && {
+          cost_in_usd_ticks: usage.cost_in_usd_ticks,
+        }),
       };
     }
     return null;

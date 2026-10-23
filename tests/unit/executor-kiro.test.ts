@@ -745,3 +745,25 @@ test("Kiro preserves required write arguments across string fragments and bills 
   assert.equal(usage.provider_credits, 0.25);
   assert.equal(usage.cost_in_usd_ticks, 50_000_000);
 });
+
+test("KiroExecutor preserves explicit zero cache counters", async () => {
+  const executor = new KiroExecutor();
+  const response = buildEventStreamResponse([
+    buildEventFrame("assistantResponseEvent", { content: "zero cache" }),
+    buildEventFrame("metadataEvent", {
+      usage: {
+        inputTokens: 12,
+        outputTokens: 2,
+        cacheReadInputTokens: 0,
+        cacheWriteInputTokens: 0,
+      },
+    }),
+  ]);
+
+  const chunks = parseSSEJsonChunks(
+    await executor.transformEventStreamToSSE(response, "kiro-model").text()
+  );
+  const finish = chunks.find((chunk) => chunk.choices?.[0]?.finish_reason);
+  assert.equal(finish.usage.cache_read_input_tokens, 0);
+  assert.equal(finish.usage.cache_creation_input_tokens, 0);
+});

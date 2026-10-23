@@ -727,6 +727,10 @@ process.env[`${PROVIDER_ID}_USER_AGENT`]
 | `KIRO_VERIFY_FULL_CRC` | `false` | Opt-in: full per-frame message CRC validation on the Kiro event stream (debug corrupted streams) |
 | `KIRO_CREDIT_PRICE_USD` | `0.02` | USD per Kiro credit; converts `meteringEvent` credits into the exact per-request cost |
 | `KIRO_REQUIRE_CREDITS` | `false` | Fail a Kiro response that reports no credit metering instead of recording it unbilled |
+| `KIRO_PROMPT_CACHE` | `false` | Opt-in: stabilize the Kiro prefix (omit the per-turn current-time prefix) and send a deterministic `agentContinuationId` |
+| `KIRO_INJECT_TIMESTAMP` | `false` | In `KIRO_PROMPT_CACHE` mode, force the per-turn current-time prefix back on |
+| `KIRO_AGENT_CONTINUATION_ID` | `true` | In `KIRO_PROMPT_CACHE` mode, send the deterministic `agentContinuationId`; set `false` to isolate the timestamp change |
+| `KIRO_CACHE_TELEMETRY_DEBUG` | `false` | Log a redacted Kiro frame summary (event types, cache fields, credits, context percentage), never prompt text |
 | `QODER_USER_AGENT` | `Qoder-Cli` | When Qoder CLI updates |
 | `CURSOR_USER_AGENT` | `Cursor/3.3` | When Cursor updates |
 

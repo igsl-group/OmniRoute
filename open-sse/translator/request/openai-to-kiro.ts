@@ -16,6 +16,11 @@ import {
   supportsKiroAdaptiveThinking,
   supportsKiroNativeReasoning,
 } from "./openai-to-kiro/adaptiveThinking.ts";
+import {
+  deriveKiroAgentContinuationId,
+  isKiroAgentContinuationEnabled,
+  shouldInjectKiroTimestamp,
+} from "./kiroCacheMode.ts";
 
 /**
  * Anthropic's direct-provider `[1m]` context-1m beta suffix. Kiro is AWS
@@ -747,16 +752,15 @@ function convertMessages(messages, tools, model) {
   const answeredToolUseIds = new Set<string>();
   for (const item of mergedHistory) {
     const toolResults = item.userInputMessage?.userInputMessageContext?.toolResults as
-      | Array<{ toolUseId?: string }>
-      | undefined;
+      Array<{ toolUseId?: string }> | undefined;
     if (Array.isArray(toolResults)) {
       for (const result of toolResults) {
         if (result?.toolUseId) answeredToolUseIds.add(result.toolUseId);
       }
     }
   }
-  const currentToolResultsForOrphanCheck = currentMessage?.userInputMessage
-    ?.userInputMessageContext?.toolResults as Array<{ toolUseId?: string }> | undefined;
+  const currentToolResultsForOrphanCheck = currentMessage?.userInputMessage?.userInputMessageContext
+    ?.toolResults as Array<{ toolUseId?: string }> | undefined;
   if (Array.isArray(currentToolResultsForOrphanCheck)) {
     for (const result of currentToolResultsForOrphanCheck) {
       if (result?.toolUseId) answeredToolUseIds.add(result.toolUseId);
@@ -764,8 +768,7 @@ function convertMessages(messages, tools, model) {
   }
   for (const item of mergedHistory) {
     const toolUses = item.assistantResponseMessage?.toolUses as
-      | Array<{ toolUseId?: string }>
-      | undefined;
+      Array<{ toolUseId?: string }> | undefined;
     if (!Array.isArray(toolUses)) continue;
     const filtered = toolUses.filter(
       (use) => use?.toolUseId && answeredToolUseIds.has(use.toolUseId)
@@ -952,9 +955,12 @@ export function buildKiroPayload(model, body, stream, credentials) {
 
   const profileArn = credentials?.providerSpecificData?.profileArn || "";
 
-  let finalContent = currentMessage?.userInputMessage?.content || "";
+  const sessionSeedContent = currentMessage?.userInputMessage?.content || "";
+  let finalContent = sessionSeedContent;
   const timestamp = new Date().toISOString();
-  finalContent = `[Context: Current time is ${timestamp}]\n\n${finalContent}`;
+  if (shouldInjectKiroTimestamp()) {
+    finalContent = `[Context: Current time is ${timestamp}]\n\n${finalContent}`;
+  }
 
   // Prepend documentation for tools whose description was relocated out of
   // `toolSpecification` (see buildKiroToolSpecs). Driven by convertMessages'
@@ -968,6 +974,7 @@ export function buildKiroPayload(model, body, stream, credentials) {
     conversationState: {
       chatTriggerType: string;
       conversationId: string;
+      agentContinuationId?: string;
       currentMessage: {
         userInputMessage: {
           content: string;
@@ -1043,13 +1050,19 @@ export function buildKiroPayload(model, body, stream, credentials) {
     : "";
   const firstRealUserTurn = history.find((h) => h?.userInputMessage?.content && !h.__synthetic);
   const firstContent =
-    seedFromPreCompression || firstRealUserTurn?.userInputMessage?.content || finalContent;
+    seedFromPreCompression || firstRealUserTurn?.userInputMessage?.content || sessionSeedContent;
 
   // Use uuidv5 with the hash of the system prompt / first message to maintain AWS Builder ID context cache
   payload.conversationState.conversationId = uuidv5(
     (firstContent || "").substring(0, 4000),
     NAMESPACE_KIRO
   );
+
+  if (isKiroAgentContinuationEnabled()) {
+    payload.conversationState.agentContinuationId = deriveKiroAgentContinuationId(
+      payload.conversationState.conversationId
+    );
+  }
 
   if (profileArn) {
     payload.profileArn = profileArn;
