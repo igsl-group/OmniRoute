@@ -441,6 +441,9 @@ function readUsageCounters(usage) {
         usage.output_tokens_details?.reasoning_tokens ??
         usage.reasoning_tokens
     ),
+    providerCredits:
+      typeof usage.provider_credits === "number" ? usage.provider_credits : undefined,
+    costUsdTicks: typeof usage.cost_in_usd_ticks === "number" ? usage.cost_in_usd_ticks : undefined,
   };
 }
 
@@ -455,6 +458,8 @@ function trackUsageFromChunk(chunk, state) {
     cacheCreateTokens,
     writeInPrompt,
     reasoningTokens,
+    providerCredits,
+    costUsdTicks,
   } = readUsageCounters(chunk.usage);
 
   // #2215 reports cache creation outside prompt_tokens.
@@ -483,6 +488,16 @@ function trackUsageFromChunk(chunk, state) {
   // not lose it on this pivot; message_delta strips it from the client payload.
   if (reasoningTokens > 0) {
     state.usage.reasoning_tokens = reasoningTokens;
+  }
+
+  // Credit-metered providers (Kiro) report the exact cost only in these fields;
+  // dropping them here made usage_history.provider_credits NULL for streaming
+  // Claude clients even though the executor had the value.
+  if (providerCredits !== undefined) {
+    state.usage.provider_credits = providerCredits;
+  }
+  if (costUsdTicks !== undefined) {
+    state.usage.cost_in_usd_ticks = costUsdTicks;
   }
 }
 

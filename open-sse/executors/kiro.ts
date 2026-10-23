@@ -41,6 +41,13 @@ import {
   createKiroToolCallRepairStream,
   isKiroToolCallRepairEnabled,
 } from "./kiro/toolCallRepair.ts";
+import {
+  createKiroCacheObservation,
+  isKiroCacheTelemetryEnabled,
+  logKiroCacheObservation,
+  observeKiroFrame,
+  type KiroCacheObservation,
+} from "./kiro/cacheTelemetry.ts";
 
 export { validateKiroToolUse } from "./kiroToolCallValidation.ts";
 
@@ -74,6 +81,7 @@ type KiroStreamState = {
   hasContextUsage?: boolean;
   hasMeteringEvent?: boolean;
   usage?: Partial<UsageSummary>;
+  cacheTelemetry?: KiroCacheObservation;
   hasReasoningContent?: boolean;
   reasoningChunkCount?: number;
   // Inline-thinking splitter state (populated only when thinkingExpected=true).
@@ -546,6 +554,7 @@ export class KiroExecutor extends BaseExecutor {
       pendingWrapperToolCalls: new Map(),
       hasReasoningContent: false,
       reasoningChunkCount: 0,
+      cacheTelemetry: isKiroCacheTelemetryEnabled() ? createKiroCacheObservation() : undefined,
       thinking: thinkingExpected ? { thinkingMode: false, pendingTag: "" } : undefined,
     };
 
@@ -708,6 +717,7 @@ export class KiroExecutor extends BaseExecutor {
             }
 
             const eventType = event.headers[":event-type"] || "";
+            observeKiroFrame(eventType, event.payload, state.cacheTelemetry);
 
             // Track total content length for token estimation
             if (!state.totalContentLength) state.totalContentLength = 0;
@@ -1047,32 +1057,34 @@ export class KiroExecutor extends BaseExecutor {
                   (metrics as JsonRecord).cache_creation_input_tokens
                 );
 
+                const cacheUsage: Pick<
+                  UsageSummary,
+                  "cache_read_input_tokens" | "cache_creation_input_tokens"
+                > = {};
+                if (cacheReadTokens !== undefined) {
+                  cacheUsage.cache_read_input_tokens = cacheReadTokens;
+                }
+                if (cacheCreationTokens !== undefined) {
+                  cacheUsage.cache_creation_input_tokens = cacheCreationTokens;
+                }
+                const hasCacheFields = Object.keys(cacheUsage).length > 0;
+
                 if (inputTokens > 0 || outputTokens > 0) {
                   state.usage = {
                     ...state.usage,
                     prompt_tokens: inputTokens,
                     completion_tokens: outputTokens,
                     total_tokens: inputTokens + outputTokens,
-                    ...((cacheReadTokens || 0) > 0 && {
-                      cache_read_input_tokens: cacheReadTokens,
-                    }),
-                    ...((cacheCreationTokens || 0) > 0 && {
-                      cache_creation_input_tokens: cacheCreationTokens,
-                    }),
+                    ...cacheUsage,
                   };
-                } else if ((cacheReadTokens || 0) > 0 || (cacheCreationTokens || 0) > 0) {
+                } else if (hasCacheFields) {
                   // Cache counts can arrive on a frame that carries no
                   // input/output totals. Preserve them instead of dropping the
                   // whole frame, and let ensureKiroUsage() fill the totals from
                   // contextUsagePercentage.
                   state.usage = {
                     ...(state.usage || {}),
-                    ...((cacheReadTokens || 0) > 0 && {
-                      cache_read_input_tokens: cacheReadTokens,
-                    }),
-                    ...((cacheCreationTokens || 0) > 0 && {
-                      cache_creation_input_tokens: cacheCreationTokens,
-                    }),
+                    ...cacheUsage,
                   };
                 }
               }
@@ -1143,6 +1155,7 @@ export class KiroExecutor extends BaseExecutor {
 
           // Send final done message
           controller.enqueue(TEXT_ENCODER.encode("data: [DONE]\n\n"));
+          logKiroCacheObservation(state.cacheTelemetry, { model, requestId: responseId });
         },
       },
       { highWaterMark: 16384 },

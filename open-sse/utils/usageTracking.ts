@@ -841,7 +841,13 @@ export function extractUsage(chunk: UsagePayloadLike | null | undefined) {
     const inputTokens = u.input_tokens || u.prompt_tokens || 0;
     const cacheRead = u.cache_read_input_tokens || 0;
     const cacheCreation = u.cache_creation_input_tokens || 0;
-    if (inputTokens > 0 || cacheRead > 0 || cacheCreation > 0) {
+    if (
+      inputTokens > 0 ||
+      cacheRead > 0 ||
+      cacheCreation > 0 ||
+      typeof u.provider_credits === "number" ||
+      typeof u.cost_in_usd_ticks === "number"
+    ) {
       return normalizeUsage({
         prompt_tokens: inputTokens + cacheRead + cacheCreation,
         completion_tokens: u.output_tokens || u.completion_tokens || 0,
@@ -849,6 +855,8 @@ export function extractUsage(chunk: UsagePayloadLike | null | undefined) {
         output_tokens: u.output_tokens || u.completion_tokens || 0,
         cache_read_input_tokens: u.cache_read_input_tokens,
         cache_creation_input_tokens: u.cache_creation_input_tokens,
+        provider_credits: u.provider_credits,
+        cost_in_usd_ticks: u.cost_in_usd_ticks,
       });
     }
   }
@@ -866,6 +874,8 @@ export function extractUsage(chunk: UsagePayloadLike | null | undefined) {
       cache_read_input_tokens: chunk.usage.cache_read_input_tokens,
       cache_creation_input_tokens: chunk.usage.cache_creation_input_tokens,
       reasoning_tokens: chunk.usage.output_tokens_details?.thinking_tokens,
+      provider_credits: chunk.usage.provider_credits,
+      cost_in_usd_ticks: chunk.usage.cost_in_usd_ticks,
     });
   }
 
